@@ -1,1 +1,8 @@
 donut
+debug
+*.prof
+*.out
+*.gcov
+*.gcda
+*.gcno
+*.o

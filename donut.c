@@ -4,6 +4,15 @@
 #include <stdbool.h>
 #include <time.h>
 
+#ifdef DEBUGGING
+	#define MAX_ITER 1000
+#endif
+#ifdef NOINLINE
+	#define FUNCTION_ATTRIBUTES __attribute((noinline))
+#else
+	#define FUNCTION_ATTRIBUTES static inline __attribute__((always_inline))
+#endif
+
 #define PI 3.14159265359
 #define INV_ROOT_3 0.57735026919
 
@@ -22,7 +31,6 @@
 #define FRAME_TIME 0.005 // (ms)
 #define DELTA_ROT_X 0.037f
 #define DELTA_ROT_Z 0.023f
-#define SLEEP_COMMAND_BUF_SIZE 64
 
 const float LIGHT_VECTOR_X = -INV_ROOT_3;
 const float LIGHT_VECTOR_Y = -INV_ROOT_3;
@@ -50,36 +58,36 @@ typedef struct _point_data
 	float z;
 } PointData;
 
-static inline __attribute__((always_inline)) void init();
-static inline __attribute__((always_inline)) void init_x_offset_buf();
-static inline __attribute__((always_inline)) void precalculate_angles();
+FUNCTION_ATTRIBUTES void init();
+FUNCTION_ATTRIBUTES void init_x_offset_buf();
+FUNCTION_ATTRIBUTES void precalculate_angles();
 
-static inline __attribute__((always_inline)) void time_loop(int i, double *delta_time);
-static inline __attribute__((always_inline)) void loop(int i, double delta_time);
-static inline __attribute__((always_inline)) void clear_grid();
-static inline __attribute__((always_inline)) void clear_line(int i);
-static inline __attribute__((always_inline)) void render_grid();
-static inline __attribute__((always_inline)) void render_line(int i);
-static inline __attribute__((always_inline)) void draw_donut(Angle rot_x, Angle rot_z);
-static inline __attribute__((always_inline)) void draw_minor_revolution(Angle rot_x, Angle rot_z, Angle major_revolution);
-static inline __attribute__((always_inline)) void draw_point(Angle rot_x, Angle rot_z, Angle major_revolution, Angle minor_revolution);
+FUNCTION_ATTRIBUTES void time_loop(int i, double *delta_time);
+FUNCTION_ATTRIBUTES void loop(int i, double delta_time);
+FUNCTION_ATTRIBUTES void clear_grid();
+FUNCTION_ATTRIBUTES void clear_line(int i);
+FUNCTION_ATTRIBUTES void render_grid();
+FUNCTION_ATTRIBUTES void render_line(int i);
+FUNCTION_ATTRIBUTES void draw_donut(Angle rot_x, Angle rot_z);
+FUNCTION_ATTRIBUTES void draw_minor_revolution(Angle rot_x, Angle rot_z, Angle major_revolution);
+FUNCTION_ATTRIBUTES void draw_point(Angle rot_x, Angle rot_z, Angle major_revolution, Angle minor_revolution);
 
-static inline __attribute__((always_inline)) PointData calculate_point_data(Angle rot_x, Angle rot_z, Angle major_revolution, Angle minor_revolution);
-static inline __attribute__((always_inline)) float calculate_luminosity(Angle rot_x, Angle rot_z, Angle major_revolution, Angle minor_revolution);
+FUNCTION_ATTRIBUTES PointData calculate_point_data(Angle rot_x, Angle rot_z, Angle major_revolution, Angle minor_revolution);
+FUNCTION_ATTRIBUTES float calculate_luminosity(Angle rot_x, Angle rot_z, Angle major_revolution, Angle minor_revolution);
 
-static inline __attribute__((always_inline)) void do_rotations(float *x, float *y, float *z, Angle rot_x, Angle rot_z, Angle major_revolution);
-static inline __attribute__((always_inline)) void apply_projection(float *x, float *y, float *z);
-static inline __attribute__((always_inline)) void rotate_xz(float *x, float *y, float *z, Angle rot_x, Angle rot_z);
+FUNCTION_ATTRIBUTES void do_rotations(float *x, float *y, float *z, Angle rot_x, Angle rot_z, Angle major_revolution);
+FUNCTION_ATTRIBUTES void apply_projection(float *x, float *y, float *z);
+FUNCTION_ATTRIBUTES void rotate_xz(float *x, float *y, float *z, Angle rot_x, Angle rot_z);
 
 
-static inline __attribute__((always_inline)) void rotate_x(float *x, float *y, float *z, Angle rot_x);
-static inline __attribute__((always_inline)) void rotate_y(float *x, float *y, float *z, Angle rot_y);
-static inline __attribute__((always_inline)) void rotate_z(float *x, float *y, float *z, Angle rot_z);
+FUNCTION_ATTRIBUTES void rotate_x(float *x, float *y, float *z, Angle rot_x);
+FUNCTION_ATTRIBUTES void rotate_y(float *x, float *y, float *z, Angle rot_y);
+FUNCTION_ATTRIBUTES void rotate_z(float *x, float *y, float *z, Angle rot_z);
 
-static inline __attribute__((always_inline)) bool is_in_grid_range_xy(int x, int y);
-static inline __attribute__((always_inline)) bool is_in_grid_range_i(int i);
+FUNCTION_ATTRIBUTES bool is_in_grid_range_xy(int x, int y);
+FUNCTION_ATTRIBUTES bool is_in_grid_range_i(int i);
 
-static inline __attribute__((always_inline)) Angle construct_angle(float rad);
+FUNCTION_ATTRIBUTES Angle construct_angle(float rad);
 
 char x_offset_buf[Y_OFFSET+1];
 Cell grid[GRID_SIZE][GRID_SIZE];
@@ -89,7 +97,11 @@ int main()
 {
 	double delta_time = 0;
 	init();
-	for (int i = 0; ;i++)
+#ifdef DEBUGGING
+	for (int i = 0; i < MAX_ITER;i++)
+#else
+	for (int i = 0; ; i++)
+#endif
 	{
 		time_loop(i, &delta_time);
 	} 
@@ -115,13 +127,16 @@ void time_loop(int i, double *delta_time)
 	loop(i, *delta_time);
 	clock_t end = clock();
 	*delta_time = ((double)(end - start) / (CLOCKS_PER_SEC));
+#ifndef DEBUGGING
 	if (*delta_time < FRAME_TIME)
 	{
 		struct timespec tim, tim2;
 		tim.tv_sec = 0;
 		tim.tv_nsec = 1e9 * (FRAME_TIME - *delta_time);
 		nanosleep(&tim, &tim2);
+		*delta_time = FRAME_TIME;
 	}
+#endif
 }
 
 
@@ -133,7 +148,7 @@ void loop(int i, double delta_time)
 	draw_donut(rot_x, rot_z);
 	printf("\x1b[H");
 	render_grid();
-	printf("Theoretical fps: %d\n", (int)(1 / delta_time));
+	printf("Fps: %d\n", (int)(1 / delta_time));
 }
 
 void init_x_offset_buf()
