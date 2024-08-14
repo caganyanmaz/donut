@@ -49,7 +49,7 @@ typedef struct _point_data
 } PointData;
 
 static inline __attribute__((always_inline)) void init();
-static inline __attribute__((always_inline)) void init_y_offset_buf();
+static inline __attribute__((always_inline)) void init_x_offset_buf();
 static inline __attribute__((always_inline)) void init_system_sleep_call_buf();
 
 static inline __attribute__((always_inline)) void loop();
@@ -76,7 +76,7 @@ static inline __attribute__((always_inline)) bool is_in_grid_range_i(int i);
 
 static inline __attribute__((always_inline)) Angle construct_angle(float rad);
 
-char y_offset_buf[Y_OFFSET+1];
+char x_offset_buf[Y_OFFSET+1];
 char system_sleep_call_buf[SLEEP_COMMAND_BUF_SIZE];
 Cell grid[GRID_SIZE][GRID_SIZE];
 
@@ -91,7 +91,7 @@ int main()
 
 void init()
 {
-	init_y_offset_buf();
+	init_x_offset_buf();
 	init_system_sleep_call_buf();
 	puts(system_sleep_call_buf);
 	system("sleep 1");
@@ -108,13 +108,13 @@ void loop(int i)
 	//system(system_sleep_call_buf);
 }
 
-void init_y_offset_buf()
+void init_x_offset_buf()
 {
 	for (int i = 0; i < Y_OFFSET; i++)
 	{
-		y_offset_buf[i] = ' ';
+		x_offset_buf[i] = ' ';
 	}
-	y_offset_buf[Y_OFFSET+1] = '\0';
+	x_offset_buf[Y_OFFSET] = '\0';
 }
 
 void init_system_sleep_call_buf()
@@ -149,7 +149,7 @@ void render_grid()
 
 void render_line(int i)
 {
-	fprintf(stdout, "%s", y_offset_buf);
+	fprintf(stdout, "%s", x_offset_buf);
 	for (int j = 0; j < GRID_SIZE; j++)
 	{
 		putc(light_scale[grid[i][j].light], stdout);
