@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdbool.h>
+#include <time.h>
 
 #define PI 3.14159265359
 #define INV_ROOT_3 0.57735026919
@@ -11,13 +12,14 @@
 #define SCALE GRID_SIZE
 #define MAJOR_REVOLUTION_SEGMENT_COUNT 500
 #define MINOR_REVOLUTION_SEGMENT_COUNT 200
+#define TOTAL_REVOLUTION_SEGMENT_COUNT 1000 // Must be divisible by both major and minor revolutions
 #define MAJOR_RADIUS 2.0f
 #define MINOR_RADIUS 1.0f
 #define OBSERVER_DISTANCE 8
 #define LIGHT_SCALE_SIZE 10
 
 #define EPSILON 0.01f // For small addition
-#define DELTA_TIME 0.05f
+#define FRAME_TIME 0.005 // (ms)
 #define DELTA_ROT_X 0.037f
 #define DELTA_ROT_Z 0.023f
 #define SLEEP_COMMAND_BUF_SIZE 64
@@ -50,9 +52,10 @@ typedef struct _point_data
 
 static inline __attribute__((always_inline)) void init();
 static inline __attribute__((always_inline)) void init_x_offset_buf();
-static inline __attribute__((always_inline)) void init_system_sleep_call_buf();
+static inline __attribute__((always_inline)) void precalculate_angles();
 
-static inline __attribute__((always_inline)) void loop();
+static inline __attribute__((always_inline)) void time_loop(int i, double *delta_time);
+static inline __attribute__((always_inline)) void loop(int i, double delta_time);
 static inline __attribute__((always_inline)) void clear_grid();
 static inline __attribute__((always_inline)) void clear_line(int i);
 static inline __attribute__((always_inline)) void render_grid();
@@ -66,6 +69,8 @@ static inline __attribute__((always_inline)) float calculate_luminosity(Angle ro
 
 static inline __attribute__((always_inline)) void do_rotations(float *x, float *y, float *z, Angle rot_x, Angle rot_z, Angle major_revolution);
 static inline __attribute__((always_inline)) void apply_projection(float *x, float *y, float *z);
+static inline __attribute__((always_inline)) void rotate_xz(float *x, float *y, float *z, Angle rot_x, Angle rot_z);
+
 
 static inline __attribute__((always_inline)) void rotate_x(float *x, float *y, float *z, Angle rot_x);
 static inline __attribute__((always_inline)) void rotate_y(float *x, float *y, float *z, Angle rot_y);
@@ -77,35 +82,58 @@ static inline __attribute__((always_inline)) bool is_in_grid_range_i(int i);
 static inline __attribute__((always_inline)) Angle construct_angle(float rad);
 
 char x_offset_buf[Y_OFFSET+1];
-char system_sleep_call_buf[SLEEP_COMMAND_BUF_SIZE];
 Cell grid[GRID_SIZE][GRID_SIZE];
+Angle angle_segments[TOTAL_REVOLUTION_SEGMENT_COUNT];
 
 int main()
 {
+	double delta_time = 0;
 	init();
 	for (int i = 0; ;i++)
 	{
-		loop(i);
+		time_loop(i, &delta_time);
 	} 
 }
 
 void init()
 {
 	init_x_offset_buf();
-	init_system_sleep_call_buf();
-	puts(system_sleep_call_buf);
-	system("sleep 1");
+	precalculate_angles();
 }
 
-void loop(int i)
+void precalculate_angles()
+{
+	for (int i = 0; i < TOTAL_REVOLUTION_SEGMENT_COUNT; i++)
+	{
+		angle_segments[i] = construct_angle(PI * 2.0f * (float)i / (float)TOTAL_REVOLUTION_SEGMENT_COUNT);
+	}
+}
+
+void time_loop(int i, double *delta_time)
+{
+	clock_t start = clock();
+	loop(i, *delta_time);
+	clock_t end = clock();
+	*delta_time = ((double)(end - start) / (CLOCKS_PER_SEC));
+	if (*delta_time < FRAME_TIME)
+	{
+		struct timespec tim, tim2;
+		tim.tv_sec = 0;
+		tim.tv_nsec = 1e9 * (FRAME_TIME - *delta_time);
+		nanosleep(&tim, &tim2);
+	}
+}
+
+
+void loop(int i, double delta_time)
 {
 	Angle rot_x = construct_angle(i * DELTA_ROT_X);
 	Angle rot_z = construct_angle(i * DELTA_ROT_Z);
 	clear_grid();
-	printf("\x1b[H");
 	draw_donut(rot_x, rot_z);
+	printf("\x1b[H");
 	render_grid();
-	//system(system_sleep_call_buf);
+	printf("Theoretical fps: %d\n", (int)(1 / delta_time));
 }
 
 void init_x_offset_buf()
@@ -115,11 +143,6 @@ void init_x_offset_buf()
 		x_offset_buf[i] = ' ';
 	}
 	x_offset_buf[Y_OFFSET] = '\0';
-}
-
-void init_system_sleep_call_buf()
-{
-	sprintf(system_sleep_call_buf, "sleep %f", DELTA_TIME);
 }
 
 void clear_grid()
@@ -161,17 +184,18 @@ void draw_donut(Angle rot_x, Angle rot_z)
 {
 	for (int i = 0; i < MAJOR_REVOLUTION_SEGMENT_COUNT; i++)
 	{
-		Angle major_revolution = construct_angle((2 * PI * (float)(i)) / (float)MAJOR_REVOLUTION_SEGMENT_COUNT);
+		Angle major_revolution = angle_segments[i * TOTAL_REVOLUTION_SEGMENT_COUNT / MAJOR_REVOLUTION_SEGMENT_COUNT];
 		draw_minor_revolution(rot_x, rot_z, major_revolution);
 	}
 }
 
-void draw_minor_revolution(Angle rot_x, Angle rot_z, Angle major_rad)
+void draw_minor_revolution(Angle rot_x, Angle rot_z, Angle major_revolution)
 {
 	for (int i = 0; i < MINOR_REVOLUTION_SEGMENT_COUNT; i++)
 	{
-		Angle minor_rad = construct_angle((2 * PI * (float)(i)) / ((float) MINOR_REVOLUTION_SEGMENT_COUNT));
-		draw_point(rot_x, rot_z, major_rad, minor_rad);
+
+		Angle minor_revolution = angle_segments[i * TOTAL_REVOLUTION_SEGMENT_COUNT / MINOR_REVOLUTION_SEGMENT_COUNT];
+		draw_point(rot_x, rot_z, major_revolution, minor_revolution);
 	}
 }
 
@@ -211,6 +235,11 @@ float calculate_luminosity(Angle rot_x, Angle rot_z, Angle major_revolution, Ang
 void do_rotations(float *x, float *y, float *z, Angle rot_x, Angle rot_z, Angle major_revolution)
 {
 	rotate_y(x, y, z, major_revolution);
+	rotate_xz(x, y, z, rot_x, rot_z);
+}
+
+void rotate_xz(float *x, float *y, float *z, Angle rot_x, Angle rot_z)
+{
 	rotate_z(x, y, z, rot_z);
 	rotate_x(x, y, z, rot_x);
 }
